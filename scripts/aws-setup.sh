@@ -38,7 +38,7 @@ ORIGINS="http://localhost:5173"
 [ -n "$WEB_ORIGIN" ] && ORIGINS="${WEB_ORIGIN%/},$ORIGINS"
 
 # ---------- S3: private bucket, block public access, CORS for browser uploads ----------
-if ! aws s3api head-bucket --bucket "$BUCKET" 2>/dev/null; then
+if ! aws s3api head-bucket --bucket "$BUCKET" >/dev/null 2>&1; then
   if [ "$REGION" = us-east-1 ]; then
     aws s3api create-bucket --bucket "$BUCKET" >/dev/null
   else
@@ -62,6 +62,8 @@ ask_secret() { # name, prompt
   if ! param_exists "$1"; then
     local value
     read -r -s -p "$2: " value; echo
+    # Neon's .NET snippet shows the string in quotes (and sometimes as code); keep only the value.
+    value="$(printf '%s' "$value" | sed -E 's/^[^"]*"//; s/"[^"]*$//; s/^[[:space:]]+//; s/[[:space:]]+$//')"
     case "$value" in postgres://*|postgresql://*)
       echo "Use the .NET format from Neon's Connect dialog (Host=...;Database=...), not a postgres:// URL."; exit 1;; esac
     [ -n "$value" ] || { echo "Value required"; exit 1; }
@@ -147,6 +149,11 @@ done
 
 # ---------- GitHub Actions deploy role (OIDC, no stored AWS keys) ----------
 OIDC_ARN="arn:aws:iam::$ACCOUNT:oidc-provider/token.actions.githubusercontent.com"
+# Repos created after July 2026 get GitHub's immutable subject "repo:OWNER@OWNER_ID/REPO@REPO_ID:...".
+# Accept that and the classic "repo:OWNER/REPO:..." form, both pinned to main.
+OWNER="${REPO%%/*}"; NAME="${REPO#*/}"
+OWNER_ID="$(curl -fsS "https://api.github.com/users/$OWNER" | python3 -c 'import sys,json; print(json.load(sys.stdin)["id"])')"
+REPO_ID="$(curl -fsS "https://api.github.com/repos/$REPO" | python3 -c 'import sys,json; print(json.load(sys.stdin)["id"])')"
 if ! aws iam get-open-id-connect-provider --open-id-connect-provider-arn "$OIDC_ARN" >/dev/null 2>&1; then
   aws iam create-open-id-connect-provider --url https://token.actions.githubusercontent.com \
     --client-id-list sts.amazonaws.com --thumbprint-list 6938fd4d98bab03faadb97b34396831e3780aea1 >/dev/null
@@ -157,7 +164,9 @@ TRUST="{
     \"Action\": \"sts:AssumeRoleWithWebIdentity\",
     \"Condition\": {
       \"StringEquals\": { \"token.actions.githubusercontent.com:aud\": \"sts.amazonaws.com\",
-                         \"token.actions.githubusercontent.com:sub\": \"repo:$REPO:ref:refs/heads/main\" } } }]}"
+                         \"token.actions.githubusercontent.com:sub\": [
+                           \"repo:$OWNER@$OWNER_ID/$NAME@$REPO_ID:ref:refs/heads/main\",
+                           \"repo:$REPO:ref:refs/heads/main\" ] } } }]}"
 if aws iam get-role --role-name "$DEPLOY_ROLE" >/dev/null 2>&1; then
   aws iam update-assume-role-policy --role-name "$DEPLOY_ROLE" --policy-document "$TRUST"
 else

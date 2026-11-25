@@ -10,6 +10,10 @@ export AWS_PAGER=""
 REGION="${REGION:-ap-southeast-1}"
 export AWS_REGION="$REGION" AWS_DEFAULT_REGION="$REGION"
 
+# The .NET AWS SDK does not read every CLI login type (e.g. "aws login"), so hand it the
+# CLI's current temporary credentials through environment variables for this run only.
+eval "$(aws configure export-credentials --format env)"
+
 ssm() { aws ssm get-parameter --name "$1" --with-decryption --query Parameter.Value --output text; }
 
 MIGRATE="$(ssm /bank-portal-ops/ConnectionStrings/Migrate)"
