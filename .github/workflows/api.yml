@@ -1,0 +1,51 @@
+name: API
+
+on:
+  pull_request:
+    paths: ["api/**", ".github/workflows/api.yml"]
+  push:
+    branches: [main]
+    paths: ["api/**", ".github/workflows/api.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: api
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - run: dotnet test Bank.sln --configuration Release
+
+  deploy:
+    # Only main deploys. AWS access is a short-lived OIDC role, so no AWS keys are stored in GitHub.
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    defaults:
+      run:
+        working-directory: api
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - run: dotnet tool restore
+      - run: dotnet lambda package --project-location Bank.Api --output-package ${{ runner.temp }}/bank-api.zip
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+      - run: |
+          aws lambda update-function-code --function-name bank-api --zip-file fileb://${{ runner.temp }}/bank-api.zip > /dev/null
+          aws lambda wait function-updated-v2 --function-name bank-api

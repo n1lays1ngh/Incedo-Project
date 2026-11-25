@@ -1,0 +1,21 @@
+# .NET
+bin/
+obj/
+*.user
+TestResults/
+
+# Node
+node_modules/
+web/dist/
+
+# Secrets and local data (never commit)
+.env
+.env.*
+!.env.example
+appsettings.*.local.json
+.dev/
+
+# OS / editors
+.DS_Store
+.vs/
+.idea/
