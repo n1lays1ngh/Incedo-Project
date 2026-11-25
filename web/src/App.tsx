@@ -2,18 +2,21 @@ import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { getSession } from './api'
 import { LoginPage, RegisterPage, VerifyPage } from './pages/Auth'
 import { ApplicationPage, ApplyPage, DashboardPage, KycPage, ProfilePage, TicketPage, TicketsPage } from './pages/Customer'
+import { LandingPage } from './pages/Landing'
 import { AgentTicketPage, AgentTicketsPage, AuditPage, QueuePage, ReviewPage, StaffPage } from './pages/Staff'
 import { Layout, RequireRole, homeFor } from './ui'
 
-function Home() {
+/** Unknown paths: signed-in users go to their dashboard, everyone else to the landing page. */
+function Fallback() {
   const session = getSession()
-  return <Navigate to={session ? homeFor(session.role) : '/login'} replace />
+  return <Navigate to={session ? homeFor(session.role) : '/'} replace />
 }
 
 export default function App() {
   return (
     <BrowserRouter>
       <Routes>
+        <Route path="/" element={<LandingPage />} />
         <Route path="/login" element={<LoginPage />} />
         <Route path="/register" element={<RegisterPage />} />
         <Route path="/verify" element={<VerifyPage />} />
@@ -51,7 +54,7 @@ export default function App() {
           </Route>
         </Route>
 
-        <Route path="*" element={<Home />} />
+        <Route path="*" element={<Fallback />} />
       </Routes>
     </BrowserRouter>
   )
